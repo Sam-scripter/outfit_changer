@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Outfit Changer</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        canvas { width: 100vw; height: 80vh; }
+        .controls { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div class="controls">
+        <input type="file" id="uploadTop" accept="image/*">
+        <button onclick="applyTopTexture()">Apply Top</button>
+        <input type="file" id="uploadBottom" accept="image/*">
+        <button onclick="applyBottomTexture()">Apply Bottom</button>
+    </div>
+
+    <script>
+        let scene, engine, character;
+        let topTextureUrl = null;
+        let bottomTextureUrl = null;
+
+        async function initBabylon() {
+            engine = new BABYLON.Engine(document.getElementById("renderCanvas"), true);
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+
+            const canvas = document.getElementById("renderCanvas");
+            const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 2, new BABYLON.Vector3(0, 1, 0), scene);
+            camera.attachControl(canvas, true);
+
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7;
+
+            character = await BABYLON.SceneLoader.ImportMeshAsync("", "https://firebasestorage.googleapis.com/v0/b/outfit-changer.firebasestorage.app/o/harry_potter.glb?alt=media&token=d495741e-1d34-4334-9260-ce6a649872d4", "", scene);
+            console.log("Model loaded:", character.meshes);
+
+            engine.runRenderLoop(() => scene.render());
+        }
+
+        async function applyTopTexture() {
+            if (!character) return console.error("Character not loaded.");
+
+            const topMesh = character.meshes.find(mesh => mesh.material && mesh.material.name.includes("Outfit_Top"));
+            if (!topMesh) return console.error("No top mesh found.");
+
+            console.log("Applying texture to:", topMesh.material.name);
+
+            const texture = new BABYLON.Texture(topTextureUrl, scene);
+            topMesh.material.albedoTexture = texture;
+        }
+
+        async function applyBottomTexture() {
+            if (!character) return console.error("Character not loaded.");
+
+            const bottomMesh = character.meshes.find(mesh => mesh.material && mesh.material.name.includes("Outfit_Bottom"));
+            if (!bottomMesh) return console.error("No bottom mesh found.");
+
+            console.log("Applying texture to:", bottomMesh.material.name);
+
+            const texture = new BABYLON.Texture(bottomTextureUrl, scene);
+            bottomMesh.material.albedoTexture = texture;
+        }
+
+        async function handleTextureUpload(event, type) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append("image", file);
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/api/upload/", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                const textureUrl = `http://127.0.0.1:8000${data.processed_image}`;
+
+                if (type === "top") {
+                    topTextureUrl = textureUrl;
+                    console.log("Top texture loaded:", topTextureUrl);
+                } else if (type === "bottom") {
+                    bottomTextureUrl = textureUrl;
+                    console.log("Bottom texture loaded:", bottomTextureUrl);
+                }
+            } catch (error) {
+                console.error("Upload failed:", error);
+            }
+        }
+
+        document.getElementById("uploadTop").addEventListener("change", (event) => handleTextureUpload(event, "top"));
+        document.getElementById("uploadBottom").addEventListener("change", (event) => handleTextureUpload(event, "bottom"));
+
+        window.addEventListener("DOMContentLoaded", initBabylon);
+    </script>
+</body>
+</html>
